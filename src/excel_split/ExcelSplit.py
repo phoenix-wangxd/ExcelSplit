@@ -1,6 +1,6 @@
-import pathlib
+import argparse
+from pathlib import Path, PosixPath
 from typing import Optional
-from pathlib import Path
 from dataclasses import dataclass, field
 from openpyxl import load_workbook, workbook, worksheet
 from src.my_log.my_log import MyLog
@@ -8,7 +8,10 @@ from src.my_log.my_log import MyLog
 # type hints
 WorkBook = workbook.workbook.Workbook
 WorkSheet = worksheet
-PosixPath = pathlib.PosixPath
+
+PARSER = argparse.ArgumentParser()
+PARSER.add_argument('-f', '--file', default='file_001.xlsx',
+                    help="input excel file path", type=str)
 
 
 def check_path_is_file(path):
@@ -48,10 +51,13 @@ class ExcelSplit:
         self.excel = ExcelObj(orig_file_path=orig_file_path)
 
         _orig_file: Path = Path(orig_file_path)
+        _orig_file_abs = _orig_file.absolute()
         self.logger.info(f"Input Origin Excel File Path: {orig_file_path}, "
-                         f"Absolute Path:{str(_orig_file.absolute())}")
-        _file_name = self.excel.orig_file_path.replace('.xls', '_new.xls')
-        self.new_file_path: PosixPath = _orig_file.parent.joinpath(_file_name)
+                         f"Absolute Path:{_orig_file_abs}")
+        _new_name = _orig_file_abs.name.replace('.xls', '_new.xls')
+        self.new_file_path: PosixPath = _orig_file_abs.parent.joinpath(
+            _new_name)
+        self.logger.info(f"Output Excel File Path: {self.new_file_path}")
         self.new_sheet_prefix: str = 'data_'
         self.split_num: int = split_numb
 
@@ -147,13 +153,15 @@ class ExcelSplit:
     def save_to_disk(self, new_file_path: Optional[str] = None):
         _path = Path(new_file_path) if new_file_path else self.new_file_path
         self.logger.info(f"Start save to File Path: {_path}, "
-                         f"Absolute Path:{str(_path.absolute())}")
+                         f"Absolute Path:{_path.absolute()}")
         self.excel.wb.save(_path)
         self.logger.info("Save to disk success!")
 
 
 if __name__ == '__main__':
-    file_path = f'file_001.xlsx'
+    args = PARSER.parse_args()
+    file_path = args.file
+
     a = ExcelSplit(file_path)
     a.creat_all_new_sheets()
     a.write_all_new_sheet_record()
