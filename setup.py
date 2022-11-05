@@ -6,7 +6,7 @@ mode_descript = "If there are a large number of data records in Excel, " \
                 "this tool can easily split the data into different sheets"
 
 setup(
-    name='excel_split_large_records',
+    name='excel-split',
     version='0.0.1',
     description=mode_descript,
     author='Phoenix Wang',
