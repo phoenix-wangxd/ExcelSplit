@@ -1,3 +1,5 @@
+import pathlib
+import sys
 import time
 import logging
 from typing import Optional
@@ -8,6 +10,7 @@ from openpyxl import load_workbook, workbook, worksheet
 # type hints
 WorkBook = workbook.workbook.Workbook
 WorkSheet = worksheet
+PosixPath = pathlib.PosixPath
 
 
 def check_path_is_file(path):
@@ -16,29 +19,36 @@ def check_path_is_file(path):
 
 
 class MyLog:
-    def __init__(self, folder_name: Optional[str] = 'run_logs'):
+    def __init__(self, folder_name: Optional[str] = 'run_logs',
+                 file_level: Optional[str] = 'info'):
         """
         Initialize a new instance
         :param folder_name:Name of the folder where logs are stored
         """
         logger = logging.getLogger()
-        logger.setLevel(logging.INFO)
+        logger.setLevel(logging.DEBUG)
 
-        log_folder = Path('.').joinpath(folder_name)
-        self.__creat_log_folder(log_folder)
-
-        _log_time = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
-        log_name = f"{_log_time}.log"
-        log_file = str(log_folder.joinpath(log_name))
-        fh = logging.FileHandler(log_file, mode='w')
-        fh.setLevel(logging.DEBUG)
-
+        # log format config
         fmt = "%(asctime)s - %(filename)s[line:%(lineno)d] " \
               "- %(levelname)s: %(message)s"
         formatter = logging.Formatter(fmt)
-        fh.setFormatter(formatter)
 
-        logger.addHandler(fh)
+        # log file config
+        log_folder = Path('.').joinpath(folder_name)
+        self.__creat_log_folder(log_folder)
+        _log_time = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
+        log_file_name = f"{_log_time}.log"
+        log_file_path = str(log_folder.joinpath(log_file_name))
+
+        file_handler = logging.FileHandler(log_file_path, mode='w')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(formatter)
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setLevel(logging.INFO)
+        stream_handler.setFormatter(formatter)
+
+        logger.addHandler(stream_handler)
+        logger.addHandler(file_handler)
         self.logger = logger
 
     @staticmethod
@@ -77,17 +87,22 @@ class ExcelSplit:
         """
         self.logger = MyLog().logger
         self.excel = ExcelObj(orig_file_path=orig_file_path)
-        _parent_path = Path(orig_file_path).parent
+
+        _orig_file: Path = Path(orig_file_path)
+        self.logger.info(f"Input Origin Excel File Path: {orig_file_path}, "
+                         f"Absolute Path:{str(_orig_file.absolute())}")
         _file_name = self.excel.orig_file_path.replace('.xls', '_new.xls')
-        self.new_file_path = _parent_path.joinpath(_file_name)
+        self.new_file_path: PosixPath = _orig_file.parent.joinpath(_file_name)
         self.new_sheet_prefix: str = 'data_'
-        self.split_num = split_numb
+        self.split_num: int = split_numb
+
         self.__open_file()
 
     def __open_file(self):
         wb: WorkBook = load_workbook(filename=self.excel.orig_file_path)
         orig_sheet_names = wb.sheetnames
         orig_first_sheet_name = orig_sheet_names[0]
+        self.logger.info(f"{orig_sheet_names = }, {orig_first_sheet_name = }")
         self.excel.wb = wb
         self.excel.orig_sheet_name_list = orig_sheet_names
         self.excel.orig_first_sheet_name = orig_first_sheet_name
@@ -108,8 +123,8 @@ class ExcelSplit:
             sheet = self.excel.wb.create_sheet(i)
             self.excel.new_sheets.append(sheet)
 
-        self.logger.info(f"now all {self.excel.wb.sheetnames = }")
-        self.logger.info(f"all new sheets {self.excel.new_sheets = }")
+        self.logger.info(f"{self.excel.new_sheets = }")
+        self.logger.info(f"all sheet names list: {self.excel.wb.sheetnames}")
 
     def write_all_new_sheet_record(self):
         for ws_name in self.excel.new_sheet_names:
@@ -119,12 +134,14 @@ class ExcelSplit:
             _records = self.get_orig_sheet_mult_rows(
                 start_row_numb=start_row_numb, count=self.split_num)
 
-            if not _records:
+            if _records:
                 self.__write_one_new_sheet(ws_name=ws_name, start_row_numb=1,
                                            src_data=_records)
+            else:
+                self.logger.warning(f"not get {_records = }")
 
     def get_orig_sheet_mult_rows(self, start_row_numb: Optional[int] = 1,
-                                 count: Optional[int] = 8000):
+                                 count: Optional[int] = 8000) -> tuple:
         """
         Get multiple records from the original sheet
         :param start_row_numb: Start reading row number, Must be greater than 0
@@ -157,17 +174,21 @@ class ExcelSplit:
         :param start_row_numb: Start write row number, Must be greater than 0
         :param src_data: Original record
         """
-        ws = self.excel.wb[ws_name]
-        self.logger.info(f"start write {len(src_data) = }")
-        for i, v in enumerate(src_data):
-            row = i + start_row_numb
-            value = v[0].value
-            self.logger.debug(f'{ws = }, {row}, {value = }')
-            ws[row] = value
+        self.logger.info(f"start: {len(src_data) = }")
+        w_ws = self.excel.wb[ws_name]
+        for index, origin_data in enumerate(src_data):
+            w_row = index + start_row_numb
+            r_one_cell = origin_data[0]
+            r_one_value = r_one_cell.value
+            self.logger.debug(f'read from {r_one_cell = }, {r_one_value = },'
+                              f'write to {w_ws = }, {w_row = }')
+            w_ws.cell(row=w_row, column=r_one_cell.column, value=r_one_value)
 
     def save_to_disk(self, new_file_path: Optional[str] = None):
-        _file_path = new_file_path if new_file_path else self.new_file_path
-        self.excel.wb.save(_file_path)
+        _path = Path(new_file_path) if new_file_path else self.new_file_path
+        self.logger.info(f"Start save to File Path: {_path}, "
+                         f"Absolute Path:{str(_path.absolute())}")
+        self.excel.wb.save(_path)
 
 
 if __name__ == '__main__':
