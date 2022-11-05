@@ -1,11 +1,9 @@
 import pathlib
-import sys
-import time
-import logging
 from typing import Optional
 from pathlib import Path
 from dataclasses import dataclass, field
 from openpyxl import load_workbook, workbook, worksheet
+from src.my_log.my_log import MyLog
 
 # type hints
 WorkBook = workbook.workbook.Workbook
@@ -16,45 +14,6 @@ PosixPath = pathlib.PosixPath
 def check_path_is_file(path):
     if not Path(path).is_file():
         raise FileExistsError(f"{path = } not a file!!")
-
-
-class MyLog:
-    def __init__(self, folder_name: Optional[str] = 'run_logs',
-                 file_level: Optional[str] = 'info'):
-        """
-        Initialize a new instance
-        :param folder_name:Name of the folder where logs are stored
-        """
-        logger = logging.getLogger()
-        logger.setLevel(logging.DEBUG)
-
-        # log format config
-        fmt = "%(asctime)s - %(filename)s[line:%(lineno)d] " \
-              "- %(levelname)s: %(message)s"
-        formatter = logging.Formatter(fmt)
-
-        # log file config
-        log_folder = Path('.').joinpath(folder_name)
-        self.__creat_log_folder(log_folder)
-        _log_time = time.strftime('%Y%m%d%H%M', time.localtime(time.time()))
-        log_file_name = f"{_log_time}.log"
-        log_file_path = str(log_folder.joinpath(log_file_name))
-
-        file_handler = logging.FileHandler(log_file_path, mode='w')
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(formatter)
-        stream_handler = logging.StreamHandler(sys.stdout)
-        stream_handler.setLevel(logging.INFO)
-        stream_handler.setFormatter(formatter)
-
-        logger.addHandler(stream_handler)
-        logger.addHandler(file_handler)
-        self.logger = logger
-
-    @staticmethod
-    def __creat_log_folder(log_folder: Path):
-        if not log_folder.is_dir():
-            log_folder.mkdir()
 
 
 @dataclass
@@ -174,7 +133,8 @@ class ExcelSplit:
         :param start_row_numb: Start write row number, Must be greater than 0
         :param src_data: Original record
         """
-        self.logger.info(f"start: {len(src_data) = }")
+        self.logger.info(f"start write to {ws_name=}, "
+                         f"record numb:{len(src_data)}")
         w_ws = self.excel.wb[ws_name]
         for index, origin_data in enumerate(src_data):
             w_row = index + start_row_numb
@@ -189,6 +149,7 @@ class ExcelSplit:
         self.logger.info(f"Start save to File Path: {_path}, "
                          f"Absolute Path:{str(_path.absolute())}")
         self.excel.wb.save(_path)
+        self.logger.info("Save to disk success!")
 
 
 if __name__ == '__main__':
