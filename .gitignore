@@ -10,7 +10,7 @@ __pycache__/
 *.xls
 *.xlsx
 
-# file
+# Desktop Services Store file, macOS Create
 .DS_Store
 
 # Distribution / packaging
